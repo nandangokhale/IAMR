@@ -27,15 +27,15 @@ struct InitialConditions
 void prob_initData();
 
 void init_HIT (amrex::Box const& vbx,
-                 amrex::Array4<amrex::Real> const& press,
-                 amrex::Array4<amrex::Real> const& vel,
-                 amrex::Array4<amrex::Real> const& scal,
-                 const int nscal,
-                 amrex::Box const& domain,
-                 amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dx,
-                 amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& problo,
-                 amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& probhi,
-                 InitialConditions IC);
+	       /* amrex::Array4<amrex::Real> const& press, */
+	       amrex::Array4<amrex::Real> const& vel,
+	       amrex::Array4<amrex::Real> const& scal,
+	       const int nscal,
+	       amrex::Box const& domain,
+	       amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dx,
+	       amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& problo,
+	       // amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& probhi,
+	       InitialConditions IC);
 
 //
 // Problems parameters, to be read from inputs file

@@ -109,6 +109,14 @@ prob.urms0 = 1.0
 
 #*******************************************************************************
 
+# Turbulent forcing parameters
+turb.nmodes = 4
+# Turn off tiling. Turbulent forcing doesn't work with tiling for now
+fabarray.mfiter_tile_size = 1024 1024 1024
+
+
+#*******************************************************************************
+
 # Factor by which grids must be coarsenable.
 amr.blocking_factor     = 8
 

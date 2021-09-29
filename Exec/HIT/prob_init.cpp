@@ -1,6 +1,10 @@
 #include <NavierStokes.H>
 #include <AMReX_ParmParse.H>
 
+#ifdef AMREX_USE_TURBULENT_FORCING
+#include <TurbulentForcing_def.H>
+#endif
+
 using namespace amrex;
 
 int NavierStokes::probtype = -1;
@@ -10,6 +14,18 @@ int NavierStokes::probtype = -1;
 //
 void NavierStokes::prob_initData ()
 {
+
+#ifdef AMREX_USE_TURBULENT_FORCING
+    //
+    // This is for single level only. Check.
+    //
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(parent->maxLevel()==0, "Turbulent forcing is single level only. Set amr.max_level = 0");
+
+    //
+    // Read in parameters for turbulent forcing
+    //
+    TurbulentForcing::read_turbulent_forcing_params();
+#endif
 
     //
     // Create struct to hold initial conditions parameters
@@ -149,23 +165,23 @@ void NavierStokes::prob_initData ()
     {
         const Box& vbx = mfi.tilebox();
 
-          init_HIT(vbx, P_new.array(mfi), S_new.array(mfi, Xvel),
-                           S_new.array(mfi, Density), nscal,
-                           domain, dx, problo, probhi, IC);
+	init_HIT(vbx, /*P_new.array(mfi),*/ S_new.array(mfi, Xvel),
+		 S_new.array(mfi, Density), nscal,
+		 domain, dx, problo, /*probhi,*/ IC);
     }
 }
 
 
 void NavierStokes::init_HIT (Box const& vbx,
-                               Array4<Real> const& press,
-                               Array4<Real> const& vel,
-                               Array4<Real> const& scal,
-                               const int nscal,
-                               Box const& domain,
-                               GpuArray<Real, AMREX_SPACEDIM> const& dx,
-                               GpuArray<Real, AMREX_SPACEDIM> const& problo,
-                               GpuArray<Real, AMREX_SPACEDIM> const& probhi,
-                               InitialConditions IC)
+			     /* Array4<Real> const& press, */
+			     Array4<Real> const& vel,
+			     Array4<Real> const& scal,
+			     const int nscal,
+			     Box const& domain,
+			     GpuArray<Real, AMREX_SPACEDIM> const& dx,
+			     GpuArray<Real, AMREX_SPACEDIM> const& problo,
+			     /* GpuArray<Real, AMREX_SPACEDIM> const& probhi,*/
+			     InitialConditions IC)
 {
     const auto domlo = amrex::lbound(domain);
 
