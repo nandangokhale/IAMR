@@ -213,20 +213,6 @@ NavierStokesBase::getForce (FArrayBox&       force,
      // Homogeneous Isotropic Forced Turbulence
      //
 
-
-     // For now, only works in 3D and without tiling
-     AMREX_ALWAYS_ASSERT(AMREX_SPACEDIM==3);
-     AMREX_ALWAYS_ASSERT(bx==force.box());
-
-     // force array bounds
-     // FIXME -- think about how bx (the box we want to fill) may not be the same as the force box!
-     int ilo = f_lo[0];
-     int jlo = f_lo[1];
-     int klo = f_lo[2];
-     int ihi = f_hi[0];
-     int jhi = f_hi[1];
-     int khi = f_hi[2];
-
      // Physical coordinates of the lower left corner of the domain
      auto const& problo = geom.ProbLoArray();
      // Physical coordinates of the upper right corner of the domain
@@ -237,11 +223,25 @@ NavierStokesBase::getForce (FArrayBox&       force,
      Real Lz = probhi[2]-problo[2];
      Real Lmin = min(Lx,Ly,Lz);
 
+
+     // For now, only works in 3D and without tiling
+     AMREX_ALWAYS_ASSERT(bx==force.box());
+     AMREX_ASSERT(AMREX_SPACEDIM==3);
+     
      int xstep = static_cast<int>(Lx/Lmin+0.5);
      int ystep = static_cast<int>(Ly/Lmin+0.5);
      int zstep = static_cast<int>(Lz/Lmin+0.5);
 
      Real kappaMax = TurbulentForcing::nmodes/Lmin + 1.0e-8;
+
+     // force array bounds
+     // FIXME -- think about how bx (the box we want to fill) may not be the same as the force box!
+     int ilo = f_lo[0];
+     int jlo = f_lo[1];
+     int klo = f_lo[2];
+     int ihi = f_hi[0];
+     int jhi = f_hi[1];
+     int khi = f_hi[2];
 
      auto const&  dx = geom.CellSizeArray();
      Real hx = dx[0];
@@ -265,22 +265,22 @@ NavierStokesBase::getForce (FArrayBox&       force,
 
      // adjust for ghost cells
      if (ilo < (ff_ilo*TurbulentForcing::ff_factor)) {
-       ff_ilo=ff_ilo-1;
+         ff_ilo=ff_ilo-1;
      }
      if (jlo < (ff_jlo*TurbulentForcing::ff_factor)) {
-       ff_jlo=ff_jlo-1;
+         ff_jlo=ff_jlo-1;
      }
      if (klo < (ff_klo*TurbulentForcing::ff_factor)) {
-       ff_klo=ff_klo-1;
+         ff_klo=ff_klo-1;
      }
      if (ihi == (ff_ihi*TurbulentForcing::ff_factor)) {
-       ff_ihi=ff_ihi+1;
+         ff_ihi=ff_ihi+1;
      }
      if (jhi == (ff_jhi*TurbulentForcing::ff_factor)) {
-       ff_jhi=ff_jhi+1;
+         ff_jhi=ff_jhi+1;
      }
      if (khi == (ff_khi*TurbulentForcing::ff_factor)) {
-       ff_khi=ff_khi+1;
+         ff_khi=ff_khi+1;
      }
 
      // allocate coarse force array
@@ -289,23 +289,57 @@ NavierStokesBase::getForce (FArrayBox&       force,
      FArrayBox ff_force(ffbx,AMREX_SPACEDIM);
      const auto& ffarr = ff_force.array();
 
-     const auto& FTX = TurbulentForcing::FTX_fab.array();
-     const auto& TAT = TurbulentForcing::TAT_fab.array();
-     const auto& FAX = TurbulentForcing::FAX_fab.array();
-     const auto& FAY = TurbulentForcing::FAY_fab.array();
-     const auto& FAZ = TurbulentForcing::FAZ_fab.array();
-     const auto& FPX = TurbulentForcing::FPX_fab.array();
-     const auto& FPY = TurbulentForcing::FPY_fab.array();
-     const auto& FPZ = TurbulentForcing::FPZ_fab.array();
-     const auto& FPXX = TurbulentForcing::FPXX_fab.array();
-     const auto& FPXY = TurbulentForcing::FPXY_fab.array();
-     const auto& FPXZ = TurbulentForcing::FPXZ_fab.array();
-     const auto& FPYX = TurbulentForcing::FPYX_fab.array();
-     const auto& FPYY = TurbulentForcing::FPYY_fab.array();
-     const auto& FPYZ = TurbulentForcing::FPYZ_fab.array();
-     const auto& FPZX = TurbulentForcing::FPZX_fab.array();
-     const auto& FPZY = TurbulentForcing::FPZY_fab.array();
-     const auto& FPZZ = TurbulentForcing::FPZZ_fab.array();
+     int i_arr = 0;
+     int fd_ncomp = 1;
+     int num_elmts=TurbulentForcing::array_size*TurbulentForcing::array_size*TurbulentForcing::array_size;
+     Dim3 fd_begin{0,0,0};
+     Dim3 fd_end{TurbulentForcing::array_size,TurbulentForcing::array_size,TurbulentForcing::array_size};
+     
+     Array4<Real> FTX(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> TAT(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPX(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPY(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPZ(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FAX(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FAY(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FAZ(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPXX(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPXY(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPXZ(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPYX(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPYY(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPYZ(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPZX(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPZY(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+     i_arr++;
+     Array4<Real> FPZZ(&TurbulentForcing::forcedata[i_arr*num_elmts], fd_begin, fd_end, fd_ncomp);
+
+//fixme
+// check the arrays
+     // {
+     //     int i = 0;
+     //     int j = 0;
+     //     int k = 0;
+
+     //     Print()<<"FTX, TAT: "<<FTX(i,j,k)<<" "<<FTX(i+1,j+1,k+1)<<std::endl;
+     // }
+     //
+     //amrex::Abort();
 
      RealBox loc = RealBox(bx,geom.CellSize(),geom.ProbLo());
      const auto& loc_lo = loc.lo();
@@ -315,136 +349,141 @@ NavierStokesBase::getForce (FArrayBox&       force,
      amrex::ParallelFor(ffbx, [ = ]
      AMREX_GPU_DEVICE (int i, int j, int k ) noexcept
      {
-       Real z = xlo[2] + ff_hz*(k-ff_klo);
-       Real y = xlo[1] + ff_hy*(j-ff_jlo);
-       Real x = xlo[0] + ff_hx*(i-ff_ilo);
+	 Real z = xlo[2] + ff_hz*(k-ff_klo);
+	 Real y = xlo[1] + ff_hy*(j-ff_jlo);
+	 Real x = xlo[0] + ff_hx*(i-ff_ilo);
 
-       for (int n = 0; n < AMREX_SPACEDIM; n++)
-	 ffarr(i,j,k,n) = 0.0;
+	 for (int n = 0; n < AMREX_SPACEDIM; n++)
+	     ffarr(i,j,k,n) = 0.0;
 
-       for ( int kx = TurbulentForcing::mode_start*xstep; kx <= TurbulentForcing::nmodes*xstep; kx += xstep) {
-	 for ( int ky = TurbulentForcing::mode_start*ystep; ky <= TurbulentForcing::nmodes*ystep; ky += ystep) {
-	   for ( int kz = TurbulentForcing::mode_start*zstep; kz <= TurbulentForcing::nmodes*zstep; kz += zstep)
-	   {
-	     Real kappa = sqrt( (kx*kx)/(Lx*Lx) + (ky*ky)/(Ly*Ly) + (kz*kz)/(Lz*Lz) );
+	 // forcedata (and Array4) has column-major layout
+	 for (int kz = TurbulentForcing::mode_start*zstep; kz <= TurbulentForcing::nmodes*zstep; kz += zstep) {
+	     for (int ky = TurbulentForcing::mode_start*ystep; ky <= TurbulentForcing::nmodes*ystep; ky += ystep) {
+		 for (int kx = TurbulentForcing::mode_start*xstep; kx <= TurbulentForcing::nmodes*xstep; kx += xstep)
+		 {
+		     Real kappa = sqrt( (kx*kx)/(Lx*Lx) + (ky*ky)/(Ly*Ly) + (kz*kz)/(Lz*Lz) );
 
-	     if (kappa <= kappaMax)
-	     {
-	       Real xT = cos(FTX(kx,ky,kz)*time + TAT(kx,ky,kz));
+		     if (kappa <= kappaMax)
+		     {
+			 Real xT = cos(FTX(kx,ky,kz)*time + TAT(kx,ky,kz));
 
-	       if ( TurbulentForcing::div_free_force )
-	       {
-		 ffarr(i,j,k,0) += xT *
-		      ( FAZ(kx,ky,kz)*TwoPi*(ky/Ly)
-			*   sin(TwoPi*kx*x/Lx+FPZX(kx,ky,kz))
-			*   cos(TwoPi*ky*y/Ly+FPZY(kx,ky,kz))
-			*   sin(TwoPi*kz*z/Lz+FPZZ(kx,ky,kz))
-			- FAY(kx,ky,kz)*TwoPi*(kz/Lz)
-			*   sin(TwoPi*kx*x/Lx+FPYX(kx,ky,kz))
-			*   sin(TwoPi*ky*y/Ly+FPYY(kx,ky,kz))
-			*   cos(TwoPi*kz*z/Lz+FPYZ(kx,ky,kz)) );
+			 if ( TurbulentForcing::div_free_force )
+			 {
+			     ffarr(i,j,k,0) += xT *
+				 ( FAZ(kx,ky,kz)*TwoPi*(ky/Ly)
+				   *   sin(TwoPi*kx*x/Lx+FPZX(kx,ky,kz))
+				   *   cos(TwoPi*ky*y/Ly+FPZY(kx,ky,kz))
+				   *   sin(TwoPi*kz*z/Lz+FPZZ(kx,ky,kz))
+				   - FAY(kx,ky,kz)*TwoPi*(kz/Lz)
+				   *   sin(TwoPi*kx*x/Lx+FPYX(kx,ky,kz))
+				   *   sin(TwoPi*ky*y/Ly+FPYY(kx,ky,kz))
+				   *   cos(TwoPi*kz*z/Lz+FPYZ(kx,ky,kz)) );
 
-		 ffarr(i,j,k,1) += xT *
-		      ( FAX(kx,ky,kz)*TwoPi*(kz/Lz)
-			*   sin(TwoPi*kx*x/Lx+FPXX(kx,ky,kz))
-			*   sin(TwoPi*ky*y/Ly+FPXY(kx,ky,kz))
-			*   cos(TwoPi*kz*z/Lz+FPXZ(kx,ky,kz))
-			- FAZ(kx,ky,kz)*TwoPi*(kx/Lx)
-			*   cos(TwoPi*kx*x/Lx+FPZX(kx,ky,kz))
-			*   sin(TwoPi*ky*y/Ly+FPZY(kx,ky,kz))
-			*   sin(TwoPi*kz*z/Lz+FPZZ(kx,ky,kz)) );
+			     ffarr(i,j,k,1) += xT *
+				 ( FAX(kx,ky,kz)*TwoPi*(kz/Lz)
+				   *   sin(TwoPi*kx*x/Lx+FPXX(kx,ky,kz))
+				   *   sin(TwoPi*ky*y/Ly+FPXY(kx,ky,kz))
+				   *   cos(TwoPi*kz*z/Lz+FPXZ(kx,ky,kz))
+				   - FAZ(kx,ky,kz)*TwoPi*(kx/Lx)
+				   *   cos(TwoPi*kx*x/Lx+FPZX(kx,ky,kz))
+				   *   sin(TwoPi*ky*y/Ly+FPZY(kx,ky,kz))
+				   *   sin(TwoPi*kz*z/Lz+FPZZ(kx,ky,kz)) );
 
-		 ffarr(i,j,k,2) += xT *
-		      ( FAY(kx,ky,kz)*TwoPi*(kx/Lx)
-			*   cos(TwoPi*kx*x/Lx+FPYX(kx,ky,kz))
-			*   sin(TwoPi*ky*y/Ly+FPYY(kx,ky,kz))
-			*   sin(TwoPi*kz*z/Lz+FPYZ(kx,ky,kz))
-			- FAX(kx,ky,kz)*TwoPi*(ky/Ly)
-			*   sin(TwoPi*kx*x/Lx+FPXX(kx,ky,kz))
-			*   cos(TwoPi*ky*y/Ly+FPXY(kx,ky,kz))
-			*   sin(TwoPi*kz*z/Lz+FPXZ(kx,ky,kz)) );
-	       }
-	       else
-	       {
+			     ffarr(i,j,k,2) += xT *
+				 ( FAY(kx,ky,kz)*TwoPi*(kx/Lx)
+				   *   cos(TwoPi*kx*x/Lx+FPYX(kx,ky,kz))
+				   *   sin(TwoPi*ky*y/Ly+FPYY(kx,ky,kz))
+				   *   sin(TwoPi*kz*z/Lz+FPYZ(kx,ky,kz))
+				   - FAX(kx,ky,kz)*TwoPi*(ky/Ly)
+				   *   sin(TwoPi*kx*x/Lx+FPXX(kx,ky,kz))
+				   *   cos(TwoPi*ky*y/Ly+FPXY(kx,ky,kz))
+				   *   sin(TwoPi*kz*z/Lz+FPXZ(kx,ky,kz)) );
+			 }
+			 else
+			 {
 
-		 ffarr(i,j,k,0) += xT*FAX(kx,ky,kz)*cos(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
-		      *                             sin(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
-                      *                             sin(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
+			     ffarr(i,j,k,0) += xT*FAX(kx,ky,kz)*cos(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
+				 *                             sin(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
+				 *                             sin(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
 
-		 ffarr(i,j,k,1) += xT*FAY(kx,ky,kz)*sin(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
-		      *                             cos(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
-		      *                             sin(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
+			     ffarr(i,j,k,1) += xT*FAY(kx,ky,kz)*sin(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
+				 *                             cos(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
+				 *                             sin(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
 
-		 ffarr(i,j,k,2) += xT*FAZ(kx,ky,kz)*sin(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
-		      *                             sin(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
-		      *                             cos(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
-	       }
+			     ffarr(i,j,k,2) += xT*FAZ(kx,ky,kz)*sin(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
+				 *                             sin(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
+				 *                             cos(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
+			 }
+		     }
+		 }
 	     }
-	   }
 	 }
-       }
 
-       for ( int kx = TurbulentForcing::mode_start; kx <= TurbulentForcing::nmodes*xstep; kx++) {
-	 for ( int ky = TurbulentForcing::mode_start; ky <= TurbulentForcing::nmodes*ystep; ky++) {
-	   for ( int kz = TurbulentForcing::mode_start; kz <= TurbulentForcing::nmodes*zstep; kz++)
-	   {
-	     Real kappa = sqrt( (kx*kx)/(Lx*Lx) + (ky*ky)/(Ly*Ly) + (kz*kz)/(Lz*Lz) );
+	 //
+	 // For high aspect ratio domain, add more modes to break symmetry at a low level.
+	 // We assume Lz is longer, Lx = Ly.
+         //
+	 for ( int kz = 1; kz <= zstep-1; kz++) {
+	     for ( int ky = TurbulentForcing::mode_start; ky <= TurbulentForcing::nmodes*ystep; ky++) {
+		 for ( int kx = TurbulentForcing::mode_start; kx <= TurbulentForcing::nmodes*xstep; kx++)
+		 {
+		     Real kappa = sqrt( (kx*kx)/(Lx*Lx) + (ky*ky)/(Ly*Ly) + (kz*kz)/(Lz*Lz) );
 
-	     if (kappa <= kappaMax)
-	     {
-	       Real xT = cos(FTX(kx,ky,kz)*time + TAT(kx,ky,kz));
+		     if (kappa <= kappaMax)
+		     {
+			 Real xT = cos(FTX(kx,ky,kz)*time + TAT(kx,ky,kz));
 
-	       if ( TurbulentForcing::div_free_force )
-	       {
-		 ffarr(i,j,k,0) += xT *
-		      ( FAZ(kx,ky,kz)*TwoPi*(ky/Ly)
-			*   sin(TwoPi*kx*x/Lx+FPZX(kx,ky,kz))
-			*   cos(TwoPi*ky*y/Ly+FPZY(kx,ky,kz))
-			*   sin(TwoPi*kz*z/Lz+FPZZ(kx,ky,kz))
-			- FAY(kx,ky,kz)*TwoPi*(kz/Lz)
-			*   sin(TwoPi*kx*x/Lx+FPYX(kx,ky,kz))
-			*   sin(TwoPi*ky*y/Ly+FPYY(kx,ky,kz))
-			*   cos(TwoPi*kz*z/Lz+FPYZ(kx,ky,kz)) );
+			 if ( TurbulentForcing::div_free_force )
+			 {
+			     ffarr(i,j,k,0) += xT *
+				 ( FAZ(kx,ky,kz)*TwoPi*(ky/Ly)
+				   *   sin(TwoPi*kx*x/Lx+FPZX(kx,ky,kz))
+				   *   cos(TwoPi*ky*y/Ly+FPZY(kx,ky,kz))
+				   *   sin(TwoPi*kz*z/Lz+FPZZ(kx,ky,kz))
+				   - FAY(kx,ky,kz)*TwoPi*(kz/Lz)
+				   *   sin(TwoPi*kx*x/Lx+FPYX(kx,ky,kz))
+				   *   sin(TwoPi*ky*y/Ly+FPYY(kx,ky,kz))
+				   *   cos(TwoPi*kz*z/Lz+FPYZ(kx,ky,kz)) );
 
-		 ffarr(i,j,k,1) += xT *
-		      ( FAX(kx,ky,kz)*TwoPi*(kz/Lz)
-			*   sin(TwoPi*kx*x/Lx+FPXX(kx,ky,kz))
-			*   sin(TwoPi*ky*y/Ly+FPXY(kx,ky,kz))
-			*   cos(TwoPi*kz*z/Lz+FPXZ(kx,ky,kz))
-			- FAZ(kx,ky,kz)*TwoPi*(kx/Lx)
-			*   cos(TwoPi*kx*x/Lx+FPZX(kx,ky,kz))
-			*   sin(TwoPi*ky*y/Ly+FPZY(kx,ky,kz))
-			*   sin(TwoPi*kz*z/Lz+FPZZ(kx,ky,kz)) );
+			     ffarr(i,j,k,1) += xT *
+				 ( FAX(kx,ky,kz)*TwoPi*(kz/Lz)
+				   *   sin(TwoPi*kx*x/Lx+FPXX(kx,ky,kz))
+				   *   sin(TwoPi*ky*y/Ly+FPXY(kx,ky,kz))
+				   *   cos(TwoPi*kz*z/Lz+FPXZ(kx,ky,kz))
+				   - FAZ(kx,ky,kz)*TwoPi*(kx/Lx)
+				   *   cos(TwoPi*kx*x/Lx+FPZX(kx,ky,kz))
+				   *   sin(TwoPi*ky*y/Ly+FPZY(kx,ky,kz))
+				   *   sin(TwoPi*kz*z/Lz+FPZZ(kx,ky,kz)) );
 
-		 ffarr(i,j,k,2) += xT *
-		      ( FAY(kx,ky,kz)*TwoPi*(kx/Lx)
-			*   cos(TwoPi*kx*x/Lx+FPYX(kx,ky,kz))
-			*   sin(TwoPi*ky*y/Ly+FPYY(kx,ky,kz))
-			*   sin(TwoPi*kz*z/Lz+FPYZ(kx,ky,kz))
-			- FAX(kx,ky,kz)*TwoPi*(ky/Ly)
-			*   sin(TwoPi*kx*x/Lx+FPXX(kx,ky,kz))
-			*   cos(TwoPi*ky*y/Ly+FPXY(kx,ky,kz))
-			*   sin(TwoPi*kz*z/Lz+FPXZ(kx,ky,kz)) );
-	       }
-	       else
-	       {
+			     ffarr(i,j,k,2) += xT *
+				 ( FAY(kx,ky,kz)*TwoPi*(kx/Lx)
+				   *   cos(TwoPi*kx*x/Lx+FPYX(kx,ky,kz))
+				   *   sin(TwoPi*ky*y/Ly+FPYY(kx,ky,kz))
+				   *   sin(TwoPi*kz*z/Lz+FPYZ(kx,ky,kz))
+				   - FAX(kx,ky,kz)*TwoPi*(ky/Ly)
+				   *   sin(TwoPi*kx*x/Lx+FPXX(kx,ky,kz))
+				   *   cos(TwoPi*ky*y/Ly+FPXY(kx,ky,kz))
+				   *   sin(TwoPi*kz*z/Lz+FPXZ(kx,ky,kz)) );
+			 }
+			 else
+			 {
 
-		 ffarr(i,j,k,0) += xT*FAX(kx,ky,kz)*cos(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
-		      *                             sin(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
-                      *                             sin(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
+			     ffarr(i,j,k,0) += xT*FAX(kx,ky,kz)*cos(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
+				 *                             sin(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
+				 *                             sin(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
 
-		 ffarr(i,j,k,1) += xT*FAY(kx,ky,kz)*sin(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
-		      *                             cos(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
-		      *                             sin(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
+			     ffarr(i,j,k,1) += xT*FAY(kx,ky,kz)*sin(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
+				 *                             cos(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
+				 *                             sin(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
 
-		 ffarr(i,j,k,2) += xT*FAZ(kx,ky,kz)*sin(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
-		      *                             sin(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
-		      *                             cos(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
-	       }
+			     ffarr(i,j,k,2) += xT*FAZ(kx,ky,kz)*sin(TwoPi*kx*x/Lx+FPX(kx,ky,kz))
+				 *                             sin(TwoPi*ky*y/Ly+FPY(kx,ky,kz))
+				 *                             cos(TwoPi*kz*z/Lz+FPZ(kx,ky,kz));
+			 }
+		     }
+		 }
 	     }
-	   }
 	 }
-       }
 
      });
 
@@ -475,9 +514,10 @@ NavierStokesBase::getForce (FArrayBox&       force,
 	 Real ff =  ( ff00*(1.-yd)+ff10*yd ) * (1. - zd)
 	     + ( ff01*(1.-yd)+ff11*yd ) * zd;
 
-	     frc(i,j,k,n) += dens(i,j,k,0) * ff;
+	 frc(i,j,k,n) += dens(i,j,k,0) * ff;
      });
 
+     // Do we really need this?
      amrex::Gpu::synchronize();
 
 #endif // Turbulent forcing
