@@ -1,9 +1,6 @@
 #AMREX_HOME defines the directory in which we will find the BoxLib directory
-# AMREX_HOME ?= ../../../amrex
-# AMREX_HYDRO_HOME ?= ../../../AMReX-Hydro
-# FIXME -- restore HOME before commiting
-AMREX_HOME ?= ../../../../amrex
-AMREX_HYDRO_HOME ?= ../../../../AMReX-Hydro
+AMREX_HOME ?= ../../../amrex
+AMREX_HYDRO_HOME ?= ../../../AMReX-Hydro
 
 #TOP defines the directory in which we will find Source, Exec, etc.
 TOP = ../..
