@@ -63,6 +63,9 @@ endif
 
 ifeq ($(USE_TURBULENT_FORCING), TRUE)
   DEFINES += -DAMREX_USE_TURBULENT_FORCING
+  ifeq ($(USE_FAST_FORCE), TRUE)
+    DEFINES += -DAMREX_USE_FAST_FORCE
+  endif
 endif
 
 # job_info support
