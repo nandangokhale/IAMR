@@ -40,21 +40,29 @@ TurbulentForcing::read_turbulent_forcing_params ()
     // Read magic forcing data from file
     //
 
-// tmp CPU storage that holds everything in one flat arrray
+    // tmp CPU storage that holds everything in one flat arrray
     int num_elmts=array_size*array_size*array_size;
     int tmp_size = num_fdarray*num_elmts;
     Real tmp[tmp_size];
 
-    //for now hardcode forceFile name
-    const char forceFile[20]="forcedata_cube.dat";
-    FILE* binfile = fopen(forceFile,"rb") ;
-    if (forceFile==NULL) {fputs ("Unable to open forceFile 'forcedata.dat'\n",stderr); exit (1);}
+    std::string forceFile = "forcedata.dat";
+    pp.query("force_file", forceFile);
+    FILE* binfile = fopen(forceFile.c_str(),"rb") ;
+    if (binfile==NULL)
+    {
+	fputs ("Unable to open forceFile 'forcedata.dat'\n",stderr);
+	exit (EXIT_FAILURE);
+    }
 
     size_t result;
-    for (unsigned j=0; j < num_fdarray; j++) {
+    for (int j=0; j < num_fdarray; j++) {
         //printf("Reading force array %i : ...\n", j);
         result=fread(&tmp[j*num_elmts],sizeof(Real),num_elmts,binfile);
-	if (result != num_elmts) {fputs ("Error reading forceFile\n",stderr); exit (3);}
+	if (result != num_elmts)
+	{
+	    fputs ("Error reading forceFile\n",stderr);
+	    exit (EXIT_FAILURE);
+	}
     }
     fclose(binfile);
 

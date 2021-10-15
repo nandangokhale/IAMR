@@ -111,6 +111,8 @@ prob.urms0 = 1.0
 
 # Turbulent forcing parameters
 turb.nmodes = 4
+turb.force_file = forcedata_cube.dat
+
 # Turn off tiling. Turbulent forcing doesn't work with tiling for now
 fabarray.mfiter_tile_size = 1024 1024 1024
 
