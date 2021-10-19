@@ -9,126 +9,17 @@ using namespace amrex;
 
 int NavierStokes::probtype = -1;
 
+// For now, define pi here, but maybe later make iamr_constants.H
+namespace {
+  constexpr Real Pi    = 3.141592653589793238462643383279502884197;
+  constexpr Real TwoPi = 2.0 * 3.141592653589793238462643383279502884197;
+}
+
 //
 // Initialize state and pressure with problem-specific data
 //
 void NavierStokes::prob_initData ()
 {
-    //
-    // Create struct to hold initial conditions parameters
-    //
-    InitialConditions IC;
-
-    // Some additional parameters for creating IC's
-    std::string iname;
-    bool binfmt = false;
-    amrex::Real urms0 = 1.0;
-    amrex::Real uin_norm = 1.0;
-
-    //
-    // Read problem parameters from inputs file
-    //
-    ParmParse pp("prob");
-
-    // for HIT
-    pp.query("inres",IC.inres);
-    if (IC.inres == 0){
-      amrex::Abort("for HIT, inres cannot be 0 !");
-    }
-    pp.query("iname",iname);
-    pp.query("binfmt",binfmt);
-    pp.query("urms0",urms0);
-
-
-    //
-    // Output info about initial turbulence 
-    //
-    amrex::Real lambda0 = 0.5;
-    amrex::Real tau  = lambda0 / urms0;
-    // Output IC
-    std::ofstream ofs("ic.txt", std::ofstream::out);
-    amrex::Print(ofs)
-      << "lambda0, urms0, tau "
-      << std::endl;
-    amrex::Print(ofs).SetPrecision(17)
-      << lambda0 << "," << urms0 << "," << tau << std::endl;
-    ofs.close();
-
-    //
-    // Load velocity fields from file.
-    //
-    // Assumes data set ordered in Fortran format.
-    // We will interpolate this data onto our domain box. 
-    // Assumes the input data is a periodic cube. If the input cube is smaller
-    // than our domain size, the cube will be repeated throughout the
-    // domain (hence the mod operations in the interpolation).
-    const size_t nx = IC.inres;
-    const size_t ny = IC.inres;
-    const size_t nz = IC.inres;
-    amrex::Vector<amrex::Real> data(
-      nx * ny * nz * 6); /* this needs to be double */
-    if (binfmt) {
-      read_binary(iname, nx, ny, nz, 6, data);
-    } else {
-      read_csv(iname, nx, ny, nz, data);
-    }
-
-    // Extract position and velocities
-    amrex::Vector<amrex::Real> xinput;
-    amrex::Vector<amrex::Real> uinput;
-    amrex::Vector<amrex::Real> vinput;
-    amrex::Vector<amrex::Real> winput;
-    amrex::Vector<amrex::Real> xdiff;
-    amrex::Vector<amrex::Real> xarray;
-
-    xinput.resize(nx * ny * nz);
-    uinput.resize(nx * ny * nz);
-    vinput.resize(nx * ny * nz);
-    winput.resize(nx * ny * nz);
-
-    for (long i = 0; i < xinput.size(); i++) {
-      xinput[i] = data[0 + i * 6];
-      uinput[i] = data[3 + i * 6] * urms0 / uin_norm;
-      vinput[i] = data[4 + i * 6] * urms0 / uin_norm;
-      winput[i] = data[5 + i * 6] * urms0 / uin_norm;
-    }
-
-    // Get the xarray table and the differences.
-    xarray.resize(nx);
-    for (long i = 0; i < xarray.size(); i++) {
-      xarray[i] = xinput[i];
-    }
-    xdiff.resize(nx);
-    std::adjacent_difference(
-      xarray.begin(),
-      xarray.end(),
-      xdiff.begin());
-    xdiff[0] = xdiff[1];
-
-    // Make sure the search array is increasing
-    if (not std::is_sorted(
-          xarray.begin(),
-          xarray.end())) {
-      amrex::Abort("Error: non ascending x-coordinate array.");
-    }
-
-    // Dimensions of the input box.
-    IC.Linput = xarray[nx - 1] + 0.5 * xdiff[nx - 1];
-
-    // fixme? this is not the most efficient way to get the data on the gpu,
-    // since AsyncArray also makes it's own copy of the host data.
-    amrex::Gpu::AsyncArray<amrex::Real> xarray_aa(xarray.data(),xarray.size());
-    amrex::Gpu::AsyncArray<amrex::Real> xdiff_aa(xdiff.data(),xdiff.size());
-    amrex::Gpu::AsyncArray<amrex::Real> uinput_aa(uinput.data(),uinput.size());
-    amrex::Gpu::AsyncArray<amrex::Real> vinput_aa(vinput.data(),vinput.size());
-    amrex::Gpu::AsyncArray<amrex::Real> winput_aa(winput.data(),winput.size());
-
-    IC.d_xarray = xarray_aa.data();
-    IC.d_xdiff  = xdiff_aa.data();
-    IC.d_uinput = uinput_aa.data();
-    IC.d_vinput = vinput_aa.data();
-    IC.d_winput = winput_aa.data();
-
     //
     // Fill state and, optionally, pressure
     //
@@ -148,10 +39,11 @@ void NavierStokes::prob_initData ()
 
 #ifdef AMREX_USE_TURBULENT_FORCING
     //
+    // Initialize data structures used for homogenous isentropic forced turbulence.
     // This is for 3D, single level only. Check.
     //
     AMREX_ALWAYS_ASSERT(AMREX_SPACEDIM==3);
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(parent->maxLevel()==0, "Turbulent forcing is single level only. Set amr.max_level = 0");   
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(parent->maxLevel()==0, "Turbulent forcing is single level only. Set amr.max_level = 0");
     // Forcing requires that Lx==Ly, Lz can be longer
     // Not sure if HIT IC's require cube or not.
     // Physical coordinates of the upper right corner of the domain
@@ -159,30 +51,227 @@ void NavierStokes::prob_initData ()
     Real Lx = probhi[0]-problo[0];
     Real Ly = probhi[1]-problo[1];
     AMREX_ALWAYS_ASSERT(Lx==Ly);
-    
-    
+
+
     //
     // Read in parameters for turbulent forcing
     //
     TurbulentForcing::read_turbulent_forcing_params();
 #endif
 
+    //
+    // Create struct to hold initial conditions parameters
+    //
+    InitialConditions IC;
+
+    //
+    // Read problem parameters from inputs file
+    //
+    ParmParse pp("prob");
+
+    pp.query("probtype",probtype);
+
+    if ( probtype == 100 )
+    {
+	//
+	// Random combination of cosine waves to be used with forced turbulence,
+	// where ICs are less important as the forcing takes over with time.
+	//
+
+	pp.query("turb_scale",IC.turb_scale);
+	pp.query("density_ic",IC.density);
+
+#ifdef _OPENMP
+#pragma omp parallel  if (Gpu::notInLaunchRegion())
+#endif
+	for (MFIter mfi(S_new,TilingIfNotGPU()); mfi.isValid(); ++mfi)
+	{
+	    const Box& vbx = mfi.tilebox();
+
+	    init_forced(vbx, /*P_new.array(mfi),*/ S_new.array(mfi, Xvel),
+			S_new.array(mfi, Density), nscal,
+			domain, dx, problo, probhi, IC);
+	}
+    }
+    else if ( probtype == 101 )
+    {
+	//
+	// Initialize homogenous isentropic turbulence from file.
+	// Can be run without forcing for a decaying HIT problem.
+
+	// Some additional parameters for creating IC's
+	std::string iname;
+	bool binfmt = false;
+	amrex::Real urms0 = 1.0;
+	amrex::Real uin_norm = 1.0;
+
+	pp.query("inres",IC.inres);
+	if (IC.inres == 0){
+	    amrex::Abort("for HIT, inres cannot be 0 !");
+	}
+	pp.query("iname",iname);
+	pp.query("binfmt",binfmt);
+	pp.query("urms0",urms0);
+
+
+	//
+	// Output info about initial turbulence
+	//
+	amrex::Real lambda0 = 0.5;
+	amrex::Real tau  = lambda0 / urms0;
+	// Output IC
+	std::ofstream ofs("ic.txt", std::ofstream::out);
+	amrex::Print(ofs)
+	    << "lambda0, urms0, tau "
+	    << std::endl;
+	amrex::Print(ofs).SetPrecision(17)
+	    << lambda0 << "," << urms0 << "," << tau << std::endl;
+	ofs.close();
+
+	//
+	// Load velocity fields from file.
+	//
+	// Assumes data set ordered in Fortran format.
+	// We will interpolate this data onto our domain box.
+	// Assumes the input data is a periodic cube. If the input cube is smaller
+	// than our domain size, the cube will be repeated throughout the
+	// domain (hence the mod operations in the interpolation).
+	const size_t nx = IC.inres;
+	const size_t ny = IC.inres;
+	const size_t nz = IC.inres;
+	amrex::Vector<amrex::Real> data(
+	    nx * ny * nz * 6); /* this needs to be double */
+	if (binfmt) {
+	    read_binary(iname, nx, ny, nz, 6, data);
+	} else {
+	    read_csv(iname, nx, ny, nz, data);
+	}
+
+	// Extract position and velocities
+	amrex::Vector<amrex::Real> xinput;
+	amrex::Vector<amrex::Real> uinput;
+	amrex::Vector<amrex::Real> vinput;
+	amrex::Vector<amrex::Real> winput;
+	amrex::Vector<amrex::Real> xdiff;
+	amrex::Vector<amrex::Real> xarray;
+
+	xinput.resize(nx * ny * nz);
+	uinput.resize(nx * ny * nz);
+	vinput.resize(nx * ny * nz);
+	winput.resize(nx * ny * nz);
+
+	for (long i = 0; i < xinput.size(); i++) {
+	    xinput[i] = data[0 + i * 6];
+	    uinput[i] = data[3 + i * 6] * urms0 / uin_norm;
+	    vinput[i] = data[4 + i * 6] * urms0 / uin_norm;
+	    winput[i] = data[5 + i * 6] * urms0 / uin_norm;
+	}
+
+	// Get the xarray table and the differences.
+	xarray.resize(nx);
+	for (long i = 0; i < xarray.size(); i++) {
+	    xarray[i] = xinput[i];
+	}
+	xdiff.resize(nx);
+	std::adjacent_difference(
+	    xarray.begin(),
+	    xarray.end(),
+	    xdiff.begin());
+	xdiff[0] = xdiff[1];
+
+	// Make sure the search array is increasing
+	if (not std::is_sorted(
+		xarray.begin(),
+		xarray.end())) {
+	    amrex::Abort("Error: non ascending x-coordinate array.");
+	}
+
+	// Dimensions of the input box.
+	IC.Linput = xarray[nx - 1] + 0.5 * xdiff[nx - 1];
+
+	// fixme? this is not the most efficient way to get the data on the gpu,
+	// since AsyncArray also makes it's own copy of the host data.
+	amrex::Gpu::AsyncArray<amrex::Real> xarray_aa(xarray.data(),xarray.size());
+	amrex::Gpu::AsyncArray<amrex::Real> xdiff_aa(xdiff.data(),xdiff.size());
+	amrex::Gpu::AsyncArray<amrex::Real> uinput_aa(uinput.data(),uinput.size());
+	amrex::Gpu::AsyncArray<amrex::Real> vinput_aa(vinput.data(),vinput.size());
+	amrex::Gpu::AsyncArray<amrex::Real> winput_aa(winput.data(),winput.size());
+
+	IC.d_xarray = xarray_aa.data();
+	IC.d_xdiff  = xdiff_aa.data();
+	IC.d_uinput = uinput_aa.data();
+	IC.d_vinput = vinput_aa.data();
+	IC.d_winput = winput_aa.data();
 
 
 
 #ifdef _OPENMP
 #pragma omp parallel  if (Gpu::notInLaunchRegion())
 #endif
-    for (MFIter mfi(S_new,TilingIfNotGPU()); mfi.isValid(); ++mfi)
-    {
-        const Box& vbx = mfi.tilebox();
+	for (MFIter mfi(S_new,TilingIfNotGPU()); mfi.isValid(); ++mfi)
+	{
+	    const Box& vbx = mfi.tilebox();
 
-	init_HIT(vbx, /*P_new.array(mfi),*/ S_new.array(mfi, Xvel),
-		 S_new.array(mfi, Density), nscal,
-		 domain, dx, problo, /*probhi,*/ IC);
+	    init_HIT(vbx, /*P_new.array(mfi),*/ S_new.array(mfi, Xvel),
+		     S_new.array(mfi, Density), nscal,
+		     domain, dx, problo, /*probhi,*/ IC);
+	}
+    }
+    else
+    {
+	amrex::Abort("NavierStokes::prob_init: unknown probtype");
     }
 }
 
+void NavierStokes::init_forced (Box const& vbx,
+				/* Array4<Real> const& press, */
+				Array4<Real> const& vel,
+				Array4<Real> const& scal,
+				const int nscal,
+				Box const& domain,
+				GpuArray<Real, AMREX_SPACEDIM> const& dx,
+				GpuArray<Real, AMREX_SPACEDIM> const& problo,
+				GpuArray<Real, AMREX_SPACEDIM> const& probhi,
+				InitialConditions IC)
+{
+  const auto domlo = amrex::lbound(domain);
+
+  amrex::ParallelFor(vbx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+  {
+    Real x = problo[0] + (i - domlo.x + 0.5)*dx[0];
+    Real y = problo[1] + (j - domlo.y + 0.5)*dx[1];
+#if (AMREX_SPACEDIM == 3)
+    Real z = problo[2] + (k - domlo.z + 0.5)*dx[2];
+#else
+    constexpr Real z = 0.0;
+#endif
+
+    const Real Lx    = (probhi[0] - problo[0]);
+    const Real Ly    = (probhi[1] - problo[1]);
+#if (AMREX_SPACEDIM == 3)
+    const Real Lz    = (probhi[2] - problo[1]);
+#else
+    const Real Lz    = 1.0;
+#endif
+    //
+    // Fill Velocity
+    //
+    AMREX_D_TERM(vel(i,j,k,0) =  IC.turb_scale * std::cos(TwoPi*y/Ly) * std::cos(TwoPi*z/Lz);,
+		 vel(i,j,k,1) =  IC.turb_scale * std::cos(TwoPi*x/Lx) * std::cos(TwoPi*z/Lz);,
+		 vel(i,j,k,2) =  IC.turb_scale * std::cos(TwoPi*x/Lx) * std::cos(TwoPi*y/Ly););
+
+    //
+    // Scalars, ordered as Density, Tracer(s)
+    //
+    scal(i,j,k,0) = IC.density;
+
+    // Tracers
+    for ( int nt=1; nt<nscal; nt++)
+    {
+      scal(i,j,k,nt) = 1.0;
+    }
+  });
+}
 
 void NavierStokes::init_HIT (Box const& vbx,
 			     /* Array4<Real> const& press, */
