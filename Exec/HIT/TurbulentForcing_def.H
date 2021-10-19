@@ -41,8 +41,8 @@ TurbulentForcing::read_turbulent_forcing_params ()
     //
 
     // tmp CPU storage that holds everything in one flat arrray
-    int num_elmts=array_size*array_size*array_size;
-    int tmp_size = num_fdarray*num_elmts;
+    const int num_elmts=array_size*array_size*array_size;
+    const int tmp_size = num_fdarray*num_elmts;
     Real tmp[tmp_size];
 
     std::string forceFile = "forcedata.dat";
@@ -54,7 +54,7 @@ TurbulentForcing::read_turbulent_forcing_params ()
 	exit (EXIT_FAILURE);
     }
 
-    size_t result;
+    int result;
     for (int j=0; j < num_fdarray; j++) {
         //printf("Reading force array %i : ...\n", j);
         result=fread(&tmp[j*num_elmts],sizeof(Real),num_elmts,binfile);
