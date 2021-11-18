@@ -239,9 +239,6 @@ NavierStokesBase::getForce (FArrayBox&       force,
      int ilo = f_lo[0];
      int jlo = f_lo[1];
      int klo = f_lo[2];
-     int ihi = f_hi[0];
-     int jhi = f_hi[1];
-     int khi = f_hi[2];
 
      auto const&  dx = geom.CellSizeArray();
      Real hx = dx[0];
@@ -311,6 +308,10 @@ NavierStokesBase::getForce (FArrayBox&       force,
      // Construct force at fewer points and then interpolate.
      // This is much faster on CPU.
      //
+
+     int ihi = f_hi[0];
+     int jhi = f_hi[1];
+     int khi = f_hi[2];
 
      // coarse cell size
      Real ff_hx = hx*TurbulentForcing::ff_factor;
@@ -495,7 +496,7 @@ NavierStokesBase::getForce (FArrayBox&       force,
 
      });
 
-     // Do we really need this? ... Need all of ffarr filled for next lambda
+     // Need all of ffarr filled for next lambda
      amrex::Gpu::synchronize();
 
      // Now interpolate onto fine grid
