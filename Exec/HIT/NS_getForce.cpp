@@ -352,6 +352,7 @@ NavierStokesBase::getForce (FArrayBox&       force,
      Box ffbx(IntVect(ff_ilo, ff_jlo, ff_klo), IntVect(ff_ihi, ff_jhi, ff_khi));
      // not sure if want elixir, gpu::sync, or async_arena here...
      FArrayBox ff_force(ffbx,AMREX_SPACEDIM);
+     Elixir ff_e = ff_force.elixir();
      const auto& ffarr = ff_force.array();
 
      // Construct node-based coarse forcing
