@@ -40,10 +40,10 @@ void NavierStokes::prob_initData ()
 #ifdef AMREX_USE_TURBULENT_FORCING
     //
     // Initialize data structures used for homogenous isentropic forced turbulence.
-    // This is for 3D, single level only. Check.
+    // This is for 3D only. Check.
     //
     AMREX_ALWAYS_ASSERT(AMREX_SPACEDIM==3);
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(parent->maxLevel()==0, "Turbulent forcing is single level only. Set amr.max_level = 0");
+
     // Forcing requires that Lx==Ly, Lz can be longer
     // Not sure if HIT IC's require cube or not.
     // Physical coordinates of the upper right corner of the domain
@@ -284,6 +284,7 @@ void NavierStokes::init_HIT (Box const& vbx,
 			     /* GpuArray<Real, AMREX_SPACEDIM> const& probhi,*/
 			     InitialConditions IC)
 {
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(parent->maxLevel()==0, "Decaying turbulence is single level only. Set amr.max_level = 0");
 #if (AMREX_SPACEDIM != 3)
     amrex::Abort("NavierStokes::init_HIT: This is a 3D problem, please recompile with DIM=3 in makefile");
 #endif
