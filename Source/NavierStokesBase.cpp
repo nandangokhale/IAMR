@@ -96,15 +96,12 @@ int         NavierStokesBase::do_cons_trac              = 0;
 int         NavierStokesBase::do_cons_trac2             = 0;
 int         NavierStokesBase::do_sync_proj              = 1;
 int         NavierStokesBase::do_reflux                 = 1;
-int         NavierStokesBase::modify_reflux_normal_vel  = 0;
 int         NavierStokesBase::do_mac_proj               = 1;
 int         NavierStokesBase::do_refine_outflow         = 0;
 int         NavierStokesBase::do_derefine_outflow       = 1;
 int         NavierStokesBase::Nbuf_outflow              = 1;
 int         NavierStokesBase::do_denminmax              = 0;
 int         NavierStokesBase::do_scalminmax             = 0;
-int         NavierStokesBase::do_scalar_update_in_order = 0;
-Vector<int>  NavierStokesBase::scalarUpdateOrder;
 int         NavierStokesBase::getForceVerbose           = 0;
 int         NavierStokesBase::do_LES                    = 0;
 int         NavierStokesBase::getLESVerbose             = 0;
@@ -192,7 +189,7 @@ namespace
     std::string      particle_restart_file;
     std::string      particle_output_file;
     bool             restart_from_nonparticle_chkfile = false;
-    int              pverbose                         = 2;
+    int              pverbose                         = 0;
 }
 
 AmrTracerParticleContainer* NavierStokesBase::theNSPC () { return NSPC; }
@@ -328,7 +325,7 @@ NavierStokesBase::NavierStokesBase (Amr&            papa,
     //
     diffusion = new Diffusion(parent,this,
                               (level > 0) ? getLevel(level-1).diffusion : 0,
-                              NUM_STATE,viscflux_reg,is_diffusive,visc_coef);
+                              NUM_STATE,viscflux_reg,is_diffusive);
     //
     // Allocate the storage for variable viscosity and diffusivity
     //
@@ -442,7 +439,6 @@ NavierStokesBase::Initialize ()
     pp.query("do_cons_trac2",            do_cons_trac2    );
     pp.query("do_sync_proj",             do_sync_proj     );
     pp.query("do_reflux",                do_reflux        );
-    pp.query("modify_reflux_normal_vel", modify_reflux_normal_vel);
     pp.query("do_init_vort_proj",        do_init_vort_proj);
     pp.query("do_init_proj",             do_init_proj     );
     pp.query("do_mac_proj",              do_mac_proj      );
@@ -459,9 +455,6 @@ NavierStokesBase::Initialize ()
     pp.query("visc_tol",visc_tol);
     pp.query("visc_abs_tol",visc_abs_tol);
 
-    if (modify_reflux_normal_vel)
-        amrex::Abort("modify_reflux_normal_vel is no longer supported");
-
     pp.query("getForceVerbose",          getForceVerbose  );
     pp.query("do_LES",                   do_LES  );
     pp.query("getLESVerbose",            getLESVerbose  );
@@ -476,11 +469,10 @@ NavierStokesBase::Initialize ()
     pp.query("refine_cutcells", refine_cutcells);
 #endif
 
+    int do_scalar_update_in_order = 0;
     pp.query("do_scalar_update_in_order",do_scalar_update_in_order );
     if (do_scalar_update_in_order) {
-	    const int n_scalar_update_order_vals = pp.countval("scalar_update_order");
-	    scalarUpdateOrder.resize(n_scalar_update_order_vals);
-	    pp.queryarr("scalar_update_order",scalarUpdateOrder,0,n_scalar_update_order_vals);
+        amrex::Abort("NavierStokesBase::Initialize(): do_scalar_update_in_order no longer supported. If needed, please open issue on github.");
     }
 
     // Don't let init_shrink be greater than 1
@@ -771,25 +763,18 @@ NavierStokesBase::buildMetrics ()
 #ifdef AMREX_USE_EB
     // make sure dx == dy == dz
     const Real* dx = geom.CellSize();
-    Print()<<"dx = "<<dx[0]<<" "<<dx[1]<<" "<<dx[2]<<" \n";
     for (int i = 1; i < BL_SPACEDIM; i++){
-      if (std::abs(dx[i]-dx[i-1]) > 1.e-12*dx[0])
-        amrex::Abort("EB requires dx == dy (== dz)\n");
+        if (std::abs(dx[i]-dx[i-1]) > 1.e-12*dx[0]){
+            Print()<<"dx = "
+                   <<AMREX_D_TERM(dx[0], <<" "<<dx[1], <<" "<<dx[2])
+                   <<std::endl;
+            amrex::Abort("EB requires dx == dy (== dz)\n");
+        }
     }
 
     const auto& ebfactory = dynamic_cast<EBFArrayBoxFactory const&>(Factory());
     volfrac = &(ebfactory.getVolFrac());
     areafrac = ebfactory.getAreaFrac();
-
-
-    //fixme? assume will need this part cribbed from CNS
-    // level_mask.clear();
-    // level_mask.define(grids,dmap,1,1);
-    // level_mask.BuildMask(geom.Domain(), geom.periodicity(),
-    //                      level_mask_covered,
-    //                      level_mask_notcovered,
-    //                      level_mask_physbnd,
-    //                      level_mask_interior);
 
 #endif
 }
@@ -843,31 +828,32 @@ NavierStokesBase::checkPoint (const std::string& dir,
 {
     AmrLevel::checkPoint(dir, os, how, dump_old);
 
-  if (avg_interval > 0){
-    VisMF::IO_Buffer io_buffer(VisMF::IO_Buffer_Size);
+    if (avg_interval > 0)
+    {
+        VisMF::IO_Buffer io_buffer(VisMF::IO_Buffer_Size);
 
-    if (ParallelDescriptor::IOProcessor()) {
+        if (ParallelDescriptor::IOProcessor())
+        {
+            std::ofstream TImeAverageFile;
+            TImeAverageFile.rdbuf()->pubsetbuf(io_buffer.dataPtr(), io_buffer.size());
+            std::string TAFileName(dir + "/TimeAverage");
+            TImeAverageFile.open(TAFileName.c_str(), std::ofstream::out |
+                                 std::ofstream::trunc |
+                                 std::ofstream::binary);
 
-      std::ofstream TImeAverageFile;
-      TImeAverageFile.rdbuf()->pubsetbuf(io_buffer.dataPtr(), io_buffer.size());
-      std::string TAFileName(dir + "/TimeAverage");
-      TImeAverageFile.open(TAFileName.c_str(), std::ofstream::out   |
-                    std::ofstream::trunc |
-                    std::ofstream::binary);
+            if( !TImeAverageFile.good()) {
+                amrex::FileOpenFailed(TAFileName);
+            }
 
-      if( !TImeAverageFile.good()) {
-           amrex::FileOpenFailed(TAFileName);
-      }
+            TImeAverageFile.precision(17);
 
-      TImeAverageFile.precision(17);
+            // write out title line
+            TImeAverageFile << "Writing time_average to checkpoint\n";
 
-      // write out title line
-      TImeAverageFile << "Writing time_average to checkpoint\n";
-
-      TImeAverageFile << NavierStokesBase::time_avg[level] << "\n";
-      TImeAverageFile << NavierStokesBase::time_avg_fluct[level] << "\n";
+            TImeAverageFile << NavierStokesBase::time_avg[level] << "\n";
+            TImeAverageFile << NavierStokesBase::time_avg_fluct[level] << "\n";
+        }
     }
-  }
 
 #ifdef AMREX_PARTICLES
     if (level == 0)
@@ -2566,7 +2552,7 @@ NavierStokesBase::restart (Amr&          papa,
 
     diffusion = new Diffusion(parent, this,
                               (level > 0) ? getLevel(level-1).diffusion : 0,
-                              NUM_STATE, viscflux_reg,is_diffusive, visc_coef);
+                              NUM_STATE, viscflux_reg,is_diffusive);
     //
     // Allocate the storage for variable viscosity and diffusivity
     //
@@ -2703,13 +2689,24 @@ NavierStokesBase::scalar_advection_update (Real dt,
                 const auto& Sn   = S_old[mfi].const_array(Density);
                 const auto& Sarr = Scal.array();
                 const auto& aofs = Aofs[mfi].const_array(Density);
+                // Create a local copy for lambda capture
+                int numscal = NUM_SCALARS;
 
-                amrex::ParallelFor(bx, NUM_SCALARS, [ Sn, Sarr, aofs, dt]
-                AMREX_GPU_DEVICE (int i, int j, int k, int n ) noexcept
+                amrex::ParallelFor(bx, [ Sn, Sarr, aofs, dt, numscal]
+                AMREX_GPU_DEVICE (int i, int j, int k) noexcept
                 {
+                    int n = 0;
+                    // For density, we can create the Crank-Nicholson half-time approximation:
                     // Snew = Sold - dt*adv
                     // Shalftime = Sarr = (Snew + Sold)/2
                     Sarr(i,j,k,n) = Sn(i,j,k,n) - 0.5 * dt * aofs(i,j,k,n);
+
+                    // For other scalars, which may have diffusive or forcing terms, this is
+                    // a safe choice.
+                    for ( n = 1; n < numscal; n++ )
+                    {
+                        Sarr(i,j,k,n) = Sn(i,j,k,n);
+                    }
                 });
 
                 const Real halftime = 0.5 * ( state[State_Type].curTime() +
@@ -3440,6 +3437,8 @@ NavierStokesBase::velocity_advection_update (Real dt)
            amrex::Print() << "---" << '\n' << "F - velocity advection update (half time):" << '\n';
         //
         // Average the new and old time to get Crank-Nicholson half time approximation.
+        // Scalars always get updated before velocity (see NavierStokes::advance), so
+        // this is garanteed to be good.
         //
         auto const& scal = ScalFAB.array();
         auto const& scal_o = U_old.array(mfi,Density);
@@ -3450,7 +3449,6 @@ NavierStokesBase::velocity_advection_update (Real dt)
             scal(i,j,k,n) = 0.5 * ( scal_o(i,j,k,n) + scal_n(i,j,k,n) );
         });
 
-        if (getForceVerbose) amrex::Print() << "Calling getForce..." << '\n';
         const Real half_time = 0.5*(state[State_Type].prevTime()+state[State_Type].curTime());
         tforces.resize(bx,AMREX_SPACEDIM);
         Elixir tf_i = tforces.elixir();
@@ -3753,7 +3751,10 @@ NavierStokesBase::read_particle_params ()
         ppp.getarr("timestamp_indices", timestamp_indices, 0, nc);
     }
 
-    ppp.query("pverbose",pverbose);
+    ppp.query("verbose",pverbose);
+    if ( ppp.countname("pverbose") > 0) {
+	amrex::Abort("particles.pverbose found in inputs. Please use particles.verbose");
+    }
     //
     // Used in initData() on startup to read in a file of particles.
     //

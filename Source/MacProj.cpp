@@ -4,7 +4,7 @@
 #include <MacProj.H>
 #include <NavierStokesBase.H>
 #include <OutFlowBC.H>
-#include <AMReX_MacProjector.H>
+#include <hydro_MacProjector.H>
 
 #ifdef AMREX_USE_EB
 #include <hydro_ebgodunov.H>
@@ -64,7 +64,7 @@ MacProj::Initialize ()
     MacProj::check_umac_periodicity = 1;
 #endif
 
-    // NOTE: IAMR uses a different max_order default than amrex::MacProjector,
+    // NOTE: IAMR uses a different max_order default than hydro::MacProjector,
     // which uses a default of 3
     static int max_order = 4;
     static int agglomeration = 1;
@@ -72,12 +72,9 @@ MacProj::Initialize ()
     static int max_fmg_iter = -1;
 
 
-    //
-    // FIXME -- probably should get rid of mac in favor of a single mac_proj
-    //
-    ParmParse pp("mac");
+    ParmParse pp("mac_proj");
 
-    pp.query("v",                      verbose);
+    pp.query("verbose",                verbose);
     pp.query("mac_tol",                mac_tol);
     pp.query("mac_abs_tol",            mac_abs_tol);
     pp.query("mac_sync_tol",           mac_sync_tol);
@@ -88,6 +85,7 @@ MacProj::Initialize ()
     pp.query("agglomeration", agglomeration);
     pp.query("consolidation", consolidation);
     pp.query("max_fmg_iter", max_fmg_iter);
+    pp.query( "maxorder"      , max_order );
 #ifdef AMREX_USE_HYPRE
     if ( pp.contains("use_hypre") )
       amrex::Abort("use_hypre is no more. To use Hypre set mac_proj.bottom_solver = hypre.");
@@ -95,17 +93,20 @@ MacProj::Initialize ()
       amrex::Abort("hypre_verbose is no more. To make the bottom solver verbose set mac_proj.bottom_verbose = 1.");
 #endif
 
-    //
-    // Need to check for maxorder here if IAMR has different default than
-    // MacProjector, to allow for runtime changes.
-    //
-    ParmParse mppp("mac_proj");
-    mppp.query( "maxorder"      , max_order );
-
-    ParmParse ppmacop("macop");
-    if ( ppmacop.contains("max_order") )
-      amrex::Abort("macop.max_order is no more. Please use mac_proj.maxorder.");
-
+    // Abort if old verbose flag is found
+    if ( pp.countname("v") > 0 ) {
+	amrex::Abort("mac_proj.v found in inputs. To set verbosity use mac_proj.verbose");
+    }
+    // Abort if old "mac." prefix is used.
+    std::set<std::string> old_mac = ParmParse::getEntries("mac");
+    if (!old_mac.empty()){
+	Print()<<"All runtime options related to the mac projection now use 'mac_proj'.\n"
+	       <<"Found these depreciated entries in the parameters list: \n";
+	for ( auto param : old_mac ) {
+	    Print()<<"  "<<param<<"\n";
+	}
+	amrex::Abort("Replace 'mac' prefix with 'mac_proj' in inputs");
+    }
 
     amrex::ExecOnFinalize(MacProj::Finalize);
 
@@ -489,13 +490,10 @@ MacProj::mac_sync_compute (int                   level,
                            Real                  dt,
                            int                   NUM_STATE,
                            Real                  be_cn_theta,
-                           bool                  modify_reflux_normal_vel,
                            int                   do_mom_diff,
                            const Vector<int>&    increment_sync,
                            bool                  update_fluxreg)
 {
-    if (modify_reflux_normal_vel)
-        amrex::Abort("modify_reflux_normal_vel is no longer supported");
     //
     // Get parameters.
     //
@@ -804,13 +802,9 @@ MacProj::mac_sync_compute (int                    level,
                            MultiFab&              /*rho_half*/,
                            FluxRegister*          adv_flux_reg,
                            Vector<AdvectionForm>& advectionType,
-                           bool                   modify_reflux_normal_vel,
                            Real                   dt,
                            bool                   update_fluxreg)
 {
-    if (modify_reflux_normal_vel)
-        amrex::Abort("modify_reflux_normal_vel is no longer supported");
-
     const DistributionMapping& dmap     = LevelData[level]->DistributionMap();
     const Geometry& geom         = parent->Geom(level);
     NavierStokesBase& ns_level   = *(NavierStokesBase*) &(parent->getLevel(level));
@@ -1347,11 +1341,11 @@ MacProj::mlmg_mac_solve (Amr* a_parent, const MultiFab* cphi, const BCRec& a_phy
     //
     // Location information is not used for non-EB
     //
-    MacProjector macproj( {u_mac}, MLMG::Location::FaceCentroid, // Location of umac (face center vs centroid)
-                          {GetArrOfConstPtrs(bcoefs)}, MLMG::Location::FaceCentroid,  // Location of beta (face center vs centroid)
-                          MLMG::Location::CellCenter,           // Location of solution variable phi (cell center vs centroid)
-                          {geom}, info,
-                          {&Rhs}, MLMG::Location::CellCentroid);  // Location of RHS (cell center vs centroid)
+    Hydro::MacProjector macproj( {u_mac}, MLMG::Location::FaceCentroid, // Location of umac (face center vs centroid)
+                                {GetArrOfConstPtrs(bcoefs)}, MLMG::Location::FaceCentroid,  // Location of beta (face center vs centroid)
+                                MLMG::Location::CellCenter,           // Location of solution variable phi (cell center vs centroid)
+                                {geom}, info,
+                                {&Rhs}, MLMG::Location::CellCentroid);  // Location of RHS (cell center vs centroid)
 
     //
     // Set BCs
