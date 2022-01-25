@@ -1345,7 +1345,7 @@ NavierStokesBase::estTimeStep ()
 #ifdef _OPENMP
 #pragma omp parallel if (Gpu::notInLaunchRegion())
 #endif
-    for (MFIter mfi(S_new,TilingIfNotGPU()); mfi.isValid(); ++mfi)
+	    for (MFIter mfi(rho_ctime,TilingIfNotGPU()); mfi.isValid(); ++mfi)
     {
        const auto& bx          = mfi.tilebox();
        const auto  cur_time    = state[State_Type].curTime();
@@ -1357,7 +1357,7 @@ NavierStokesBase::estTimeStep ()
                           << "Calling getForce..." << '\n';
        getForce(tforces_fab,bx,0,AMREX_SPACEDIM,cur_time,S_new[mfi],S_new[mfi],Density,mfi);
 
-       const auto& rho   = S_new.array(mfi,Density);
+              const auto& rho   = rho_ctime.array(mfi);
        const auto& gradp = Gp.array(mfi);
        const auto& force = tforces.array(mfi);
        amrex::ParallelFor(bx, [rho, gradp, force]
