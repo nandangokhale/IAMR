@@ -1160,7 +1160,7 @@ NavierStokesBase::create_umac_grown (int nGrow,
             const Box& bx = mfi.tilebox();
             auto const& maskarr = mask.const_array(mfi);
             Array4<const Real> foo;
-            auto const& divu = (have_divu) ? a_divu->const_array(mfi) : foo;
+            auto const& divu = (a_divu) ? a_divu->const_array(mfi) : foo;
             AMREX_D_TERM(auto const& umac = u_mac_fine[0]->array(mfi);,
                          auto const& vmac = u_mac_fine[1]->array(mfi);,
                          auto const& wmac = u_mac_fine[2]->array(mfi));
@@ -4610,8 +4610,8 @@ NavierStokesBase::predict_velocity (Real  dt)
 
        FillPatchIterator S_fpi(*this,visc_terms,nghost_state(),prev_time,State_Type,Density,NUM_SCALARS);
        MultiFab& Smf=S_fpi.get_mf();
-
-       MultiFab forcing_term( grids, dmap, AMREX_SPACEDIM, nghost_force() );
+       
+       MultiFab forcing_term( grids, dmap, AMREX_SPACEDIM, nghost_force(), MFInfo(), Factory());
 
        //
        // Compute forcing
@@ -4638,15 +4638,44 @@ NavierStokesBase::predict_velocity (Real  dt)
                auto const& visc = visc_terms.const_array(U_mfi,Xvel);
                auto const& gp   = Gp.const_array(U_mfi);
                auto const& rho  = Smf.const_array(U_mfi); //It should be equivalent to rho_ptime.const_array(U_mfi);
+#ifdef AMREX_USE_EB
+	       auto const& vfrac = EBFactory().getVolFrac().const_array(U_mfi);
+#endif
 
-               amrex::ParallelFor(gbx, AMREX_SPACEDIM, [tf, visc, gp, rho]
+               amrex::ParallelFor(gbx, AMREX_SPACEDIM, [=]
                AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
                {
-                   tf(i,j,k,n) = ( tf(i,j,k,n) + visc(i,j,k,n) - gp(i,j,k,n) ) / rho(i,j,k);
-               });
+		   std::ostringstream ss;
+		   ss<<"index: "<<i<<" "<<j<<" "<<k<<" "<<n<<"\n"
+		     << "tf = " << tf(i,j,k,n) <<"\n"
+		     << "gp = " << gp(i,j,k,n) <<"\n"
+		     << "visc = " << visc(i,j,k,n) <<"\n"
+		     << "rho = " << rho(i,j,k) <<std::endl;
+		   BL_BACKTRACE_PUSH(ss.str()); // PUSH takes std::string
+#ifdef AMREX_USE_EB
+		   // Guard against division by zero, with the concern being EB covered values
+		   // set to zero.
+		   if ( vfrac (i,j,k) > 0. )
+#endif
+		   {
+		       //tf(i,j,k,n) = ( tf(i,j,k,n) + visc(i,j,k,n) - gp(i,j,k,n) ) / rho(i,j,k);
+		       tf(i,j,k,n) = ( tf(i,j,k,n) ) / rho(i,j,k);
+		       if ( i==32 &&j==32 &&k==29 && n==2 ){
+			   std::cout<<"vfrac "<<vfrac(i,j,k)<<std::endl;
+		       }
+		   }
+	       });
            }
        }
 
+       // //fixme
+       // std::cout<<"Calling set covered(tf)..."<<std::endl;
+       // EB_set_covered(forcing_term, 0.);
+       // VisMF::Write(Umf, "mfvel");
+       // VisMF::Write(forcing_term, "mftf");
+       // print_state(EBFactory().getVolFrac(),IntVect(32,32,29));
+//
+       
 #ifdef AMREX_USE_EB
        if (!EBFactory().isAllRegular())
        {
@@ -4683,6 +4712,12 @@ NavierStokesBase::predict_velocity (Real  dt)
                                    geom, m_bcrec_velocity,m_bcrec_velocity_d.dataPtr());
        }
    }
+
+   //fixme
+   VisMF::Write(u_mac[0], "mfumacx");
+   VisMF::Write(u_mac[1], "mfumacy");
+   VisMF::Write(u_mac[2], "mfumacz");
+//
 
    if (verbose > 1)
    {
@@ -4896,7 +4931,7 @@ NavierStokesBase::InitialRedistribution ()
     FillPatchIterator S_fpi(*this, S_new, nghost_state(), state[State_Type].curTime(),
                             State_Type, 0, NUM_STATE);
     MultiFab& Smf=S_fpi.get_mf();
-    EB_set_covered(Smf, 0.0);
+    EB_set_covered(Smf, COVERED_VAL);
 
     MultiFab tmp( grids, dmap, NUM_STATE, nghost_state(), MFInfo(), Factory() );
     MultiFab::Copy(tmp, Smf, 0, 0, NUM_STATE, nghost_state());
