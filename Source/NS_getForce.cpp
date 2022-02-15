@@ -222,18 +222,37 @@ NavierStokesBase::getForce (FArrayBox&       force,
    }
 
    if (ncomp_scal > 0) {
-       force.setVal<RunOn::Gpu>(0.0, bx, scomp_scal, ncomp_scal);
-       //
-       // Or create user-defined forcing.
-       // Recall we compute a density-weighted forcing term.
-       //
-       // auto const& frc  = force.array(scomp_scal);
-       // amrex::ParallelFor(bx, ncomp_scal, [frc]
-       // AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept
-       // {
-       //          frc(i,j,k,n) = ;
-       //          frc(i,j,k,n) *= rho;
-       // });
+
+       // NGokhale: Create a user-defined forcing (recall that the force term is density weighted)
+       auto const& frc  = force.array(scomp_scal);
+       auto const& dx = geom.CellSize();
+       auto const& problo = geom.ProbLoArray();
+       Box const&  domain = geom.Domain();
+       const auto domlo = amrex::lbound(domain);
+       amrex::ParallelFor(bx, ncomp_scal, [frc, ncomp_scal, dx, problo, domain, domlo]
+       AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept
+       {
+          // NGokhale: Heat input source term for Temperature.
+          //           We are solving dT/dt + U dot del T = ( del dot lambda grad T + H_T ) / (rho c_p),
+          //           so our density-weighted heat input is H_T/c_p.
+          if ( ((ncomp_scal == 3) && (n == 2)) || ((ncomp_scal == 2) && (n == 1)) ) {
+             const Real c_p = 795.0;
+             const Real H_T = 1e13;
+
+             // NGokhale: Apply the heat in the centre of the block
+             Real x = problo[0] + (i - domlo.x + 0.5)*dx[0];
+             Real y = problo[1] + (j - domlo.y + 0.5)*dx[1];
+             Real z = problo[2] + (k - domlo.z + 0.5)*dx[2];
+             if ( (x >= -200e-6) && (x <= 200e-6) && (y >= -200e-6) && (y <= 200e-6) && (z >= -100e-6) && (z <= 100e-6) ) {
+                frc(i,j,k,n) = H_T / c_p;
+             } else {
+                frc(i,j,k,n) = 0.0;
+             }
+          } else {
+             frc(i,j,k,n) = 0.0;
+          }
+       });
+
    }
      
    if (ParallelDescriptor::IOProcessor() && getForceVerbose) {

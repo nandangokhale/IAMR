@@ -139,6 +139,13 @@ void NavierStokes::prob_initData ()
 			   S_new.array(mfi, Density), nscal,
 			   domain, dx, problo, probhi, IC);
 	}
+        else if ( 12 == probtype )
+	{
+    // NGokhale: Initial conditions for a static block of material at ambient temperature
+	  init_StaticBlock(vbx, P_new.array(mfi), S_new.array(mfi, Xvel),
+			   S_new.array(mfi, Density), nscal,
+			   domain, dx, problo, probhi, IC);
+	}
 	else
         {
             amrex::Abort("NavierStokes::prob_init: unknown probtype");
@@ -601,4 +608,38 @@ void NavierStokes::init_ConvectedVortex (Box const& vbx,
       scal(i,j,k,nt) = 1.0;
     }
   });
+}
+
+// NGokhale: Initial conditions for a static block of material at ambient temperature
+void NavierStokes::init_StaticBlock (Box const& vbx,
+                                         Array4<Real> const& /*press*/,
+                                         Array4<Real> const& vel,
+                                         Array4<Real> const& scal,
+                                         const int nscal,
+                                         Box const& domain,
+                                         GpuArray<Real, AMREX_SPACEDIM> const& dx,
+                                         GpuArray<Real, AMREX_SPACEDIM> const& problo,
+                                         GpuArray<Real, AMREX_SPACEDIM> const& /*probhi*/,
+                                         InitialConditions IC)
+{
+  #if (AMREX_SPACEDIM == 3)
+    const auto domlo = amrex::lbound(domain);
+
+    amrex::ParallelFor(vbx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+    {
+      // NGokhale: Initialise with 0 velocity
+      vel(i,j,k,0) = 0.0;
+      vel(i,j,k,1) = 0.0;
+      vel(i,j,k,2) = 0.0;
+
+      // NGokhale: Scalars ordered as Density, Tracer and Temperature
+
+      // NGokhale: Density is set to be 7860 kg/m^3 everywhere, the Tracer is set to equal 1 everywhere, and Temperature is set to equal 293 K everywhere.
+      scal(i,j,k,0) = 7860.0;
+      scal(i,j,k,1) = 1.0;
+      scal(i,j,k,2) = 293.0;
+    });
+  #else
+    amrex::Abort("NavierStokes::init_StaticBlock: This test can only be run in 3D.");
+  #endif
 }

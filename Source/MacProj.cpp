@@ -733,9 +733,11 @@ MacProj::mac_sync_compute (int                   level,
                             // with tforces = H_T/c_p (since it's always density-weighted), and
                             // visc = del dot mu grad T, where mu = lambda/c_p
                             //
-                            amrex::ParallelFor(gbx, [tf, visc, rho]
+                            // NGokhale: Since we assume that mu = lambda, we need to divide visc by c_p as well
+                            const Real c_p = 795.0;
+                            amrex::ParallelFor(gbx, [tf, visc, rho, c_p]
                             AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-                            { tf(i,j,k) = ( tf(i,j,k) + visc(i,j,k) ) / rho(i,j,k); });
+                            { tf(i,j,k) = ( tf(i,j,k) + (visc(i,j,k)/c_p) ) / rho(i,j,k); });
                         }
                         else
                         {

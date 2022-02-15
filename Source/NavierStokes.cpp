@@ -784,9 +784,11 @@ NavierStokes::scalar_advection (Real dt,
 		  // with tforces = H_T/c_p (since it's always density-weighted), and
 		  // visc = del dot mu grad T, where mu = lambda/c_p
 		  //
-		  amrex::ParallelFor(force_bx, [tf, visc, rho]
+          // NGokhale: Since we assume that mu = lambda, we need to divide visc by c_p as well
+          const Real c_p = 795.0;
+		  amrex::ParallelFor(force_bx, [tf, visc, rho, c_p]
                   AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-                  { tf(i,j,k) = ( tf(i,j,k) + visc(i,j,k) ) / rho(i,j,k); });
+                  { tf(i,j,k) = ( tf(i,j,k) + (visc(i,j,k)/c_p) ) / rho(i,j,k); });
 		}
 		else
 		{
@@ -949,6 +951,13 @@ NavierStokes::scalar_diffusion_update (Real dt,
         const int betaComp = 0;
         const int Rho_comp = Density;
 	const int bc_comp  = sigma;
+
+        // NGokhale: Set alpha = cp_h for Temperature diffusion
+        if (sigma == Temp) {
+            const Real cp_h = 795.0;
+            alpha = new MultiFab(Rh.boxArray(), Rh.DistributionMap(), Rh.nComp(), Rh.nGrow());
+            alpha->setVal(cp_h);
+        }
 
         diffusion->diffuse_scalar (Sn, Sn, Snp1, Snp1, sigma, 1, Rho_comp,
                                    prev_time,curr_time,be_cn_theta,Rh,rho_flag,
@@ -1893,6 +1902,10 @@ NavierStokes::calc_divu (Real      time,
 
     if (have_divu)
     {
+      // NGokhale: Hard-code divu = 0.
+      divu.setVal(0);
+      return;
+
       // Don't think we need this here, but then ghost cells are uninitialized
       // divu.setVal(0);
 
